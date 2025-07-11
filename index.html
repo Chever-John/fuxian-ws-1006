@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket 1006错误测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .scenario {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .scenario h3 {
+            margin-top: 0;
+            color: #666;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .connect-btn {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .disconnect-btn {
+            background-color: #f44336;
+            color: white;
+        }
+        .send-btn {
+            background-color: #2196F3;
+            color: white;
+        }
+        button:hover {
+            opacity: 0.8;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .log {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .log-entry {
+            margin: 2px 0;
+            padding: 2px 5px;
+        }
+        .log-info {
+            color: #2196F3;
+        }
+        .log-success {
+            color: #4CAF50;
+        }
+        .log-error {
+            color: #f44336;
+        }
+        .log-warning {
+            color: #ff9800;
+        }
+        .status {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .status-connected {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .status-disconnected {
+            background-color: #f44336;
+            color: white;
+        }
+        .status-connecting {
+            background-color: #ff9800;
+            color: white;
+        }
+        .error-info {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>WebSocket 1006 错误测试工具</h1>
+        
+        <div class="error-info">
+            <h3>关于错误码 1006</h3>
+            <p><strong>1006 Abnormal Closure</strong>: 表示连接异常关闭，没有收到正常的关闭帧。常见原因：</p>
+            <ul>
+                <li>服务器进程崩溃或被强制终止</li>
+                <li>网络连接中断</li>
+                <li>代理服务器超时</li>
+                <li>服务器直接关闭TCP连接而非正常关闭WebSocket</li>
+            </ul>
+        </div>
+
+        <!-- 场景1 -->
+        <div class="scenario">
+            <h3>场景1: 服务器异常断开</h3>
+            <p>服务器收到消息后直接关闭底层TCP连接，不发送WebSocket关闭帧</p>
+            <div>
+                <span class="status status-disconnected" id="status1">未连接</span>
+                <button class="connect-btn" onclick="connect('scenario1')">连接</button>
+                <button class="disconnect-btn" onclick="disconnect('scenario1')" disabled>断开</button>
+                <button class="send-btn" onclick="sendMessage('scenario1')" disabled>发送心跳</button>
+            </div>
+            <div class="log" id="log1"></div>
+        </div>
+
+        <!-- 场景2 -->
+        <div class="scenario">
+            <h3>场景2: 读取超时</h3>
+            <p>服务器在10秒后停止响应，触发读取超时</p>
+            <div>
+                <span class="status status-disconnected" id="status2">未连接</span>
+                <button class="connect-btn" onclick="connect('scenario2')">连接</button>
+                <button class="disconnect-btn" onclick="disconnect('scenario2')" disabled>断开</button>
+                <button class="send-btn" onclick="sendMessage('scenario2')" disabled>发送心跳</button>
+                <button class="send-btn" onclick="startHeartbeat('scenario2')" disabled>启动自动心跳</button>
+            </div>
+            <div class="log" id="log2"></div>
+        </div>
+
+        <!-- 场景3 -->
+        <div class="scenario">
+            <h3>场景3: 服务器崩溃</h3>
+            <p>服务器在5-15秒内随机崩溃（panic）</p>
+            <div>
+                <span class="status status-disconnected" id="status3">未连接</span>
+                <button class="connect-btn" onclick="connect('scenario3')">连接</button>
+                <button class="disconnect-btn" onclick="disconnect('scenario3')" disabled>断开</button>
+                <button class="send-btn" onclick="sendMessage('scenario3')" disabled>发送心跳</button>
+                <button class="send-btn" onclick="startHeartbeat('scenario3')" disabled>启动自动心跳</button>
+            </div>
+            <div class="log" id="log3"></div>
+        </div>
+
+        <!-- 场景4 -->
+        <div class="scenario">
+            <h3>场景4: 代理超时</h3>
+            <p>模拟长时间无数据传输导致的代理超时（约60秒）</p>
+            <div>
+                <span class="status status-disconnected" id="status4">未连接</span>
+                <button class="connect-btn" onclick="connect('scenario4')">连接</button>
+                <button class="disconnect-btn" onclick="disconnect('scenario4')" disabled>断开</button>
+                <button class="send-btn" onclick="sendMessage('scenario4')" disabled>发送心跳</button>
+            </div>
+            <div class="log" id="log4"></div>
+        </div>
+
+        <!-- 正常场景 -->
+        <div class="scenario">
+            <h3>正常场景: 稳定连接</h3>
+            <p>正常的WebSocket连接，包含心跳机制</p>
+            <div>
+                <span class="status status-disconnected" id="status-normal">未连接</span>
+                <button class="connect-btn" onclick="connect('normal')">连接</button>
+                <button class="disconnect-btn" onclick="disconnect('normal')" disabled>断开</button>
+                <button class="send-btn" onclick="sendMessage('normal')" disabled>发送心跳</button>
+                <button class="send-btn" onclick="startHeartbeat('normal')" disabled>启动自动心跳</button>
+            </div>
+            <div class="log" id="log-normal"></div>
+        </div>
+    </div>
+
+    <script>
+        const connections = {};
+        const heartbeats = {};
+
+        function log(scenario, message, type = 'info') {
+            // 处理 scenario1, scenario2 等格式，提取数字
+            const scenarioId = scenario.startsWith('scenario') ? scenario.replace('scenario', '') : scenario;
+            const logElement = document.getElementById(`log${scenarioId === 'normal' ? '-normal' : scenarioId}`);
+            if (!logElement) {
+                console.error(`找不到日志元素: log${scenarioId === 'normal' ? '-normal' : scenarioId}`);
+                return;
+            }
+            const time = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            entry.textContent = `${time} ➤ ${message}`;
+            logElement.appendChild(entry);
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        function updateStatus(scenario, status) {
+            // 处理 scenario1, scenario2 等格式，提取数字
+            const scenarioId = scenario.startsWith('scenario') ? scenario.replace('scenario', '') : scenario;
+            const statusElement = document.getElementById(`status${scenarioId === 'normal' ? '-normal' : scenarioId}`);
+            if (!statusElement) {
+                console.error(`找不到状态元素: status${scenarioId === 'normal' ? '-normal' : scenarioId}`);
+                return;
+            }
+            statusElement.textContent = status;
+            statusElement.className = 'status';
+            
+            const buttons = statusElement.parentElement.querySelectorAll('button');
+            
+            switch(status) {
+                case '已连接':
+                    statusElement.classList.add('status-connected');
+                    buttons[0].disabled = true; // 连接按钮
+                    buttons[1].disabled = false; // 断开按钮
+                    for(let i = 2; i < buttons.length; i++) {
+                        buttons[i].disabled = false; // 其他按钮
+                    }
+                    break;
+                case '未连接':
+                    statusElement.classList.add('status-disconnected');
+                    buttons[0].disabled = false; // 连接按钮
+                    buttons[1].disabled = true; // 断开按钮
+                    for(let i = 2; i < buttons.length; i++) {
+                        buttons[i].disabled = true; // 其他按钮
+                    }
+                    break;
+                case '连接中...':
+                    statusElement.classList.add('status-connecting');
+                    for(let button of buttons) {
+                        button.disabled = true; // 所有按钮禁用
+                    }
+                    break;
+            }
+        }
+
+        function connect(scenario) {
+            log(scenario, `尝试连接到 ws://localhost:8080/ws/${scenario}...`, 'info');
+            updateStatus(scenario, '连接中...');
+            
+            const ws = new WebSocket(`ws://localhost:8080/ws/${scenario}`);
+            connections[scenario] = ws;
+
+            ws.onopen = (event) => {
+                log(scenario, `WebSocket连接已建立`, 'success');
+                updateStatus(scenario, '已连接');
+            };
+
+            ws.onmessage = (event) => {
+                log(scenario, `收到消息: ${event.data}`, 'info');
+            };
+
+            ws.onerror = (event) => {
+                log(scenario, `WebSocket错误发生`, 'error');
+            };
+
+            ws.onclose = (event) => {
+                let closeMessage = `WebSocket连接已关闭: `;
+                
+                if (event.code === 1006) {
+                    closeMessage += `非正常关闭，可能是网络问题 (${event.code})`;
+                    log(scenario, closeMessage, 'error');
+                } else if (event.wasClean) {
+                    closeMessage += `正常关闭 (${event.code}): ${event.reason || '无原因'}`;
+                    log(scenario, closeMessage, 'warning');
+                } else {
+                    closeMessage += `异常关闭 (${event.code}): ${event.reason || '无原因'}`;
+                    log(scenario, closeMessage, 'error');
+                }
+                
+                updateStatus(scenario, '未连接');
+                stopHeartbeat(scenario);
+                delete connections[scenario];
+            };
+        }
+
+        function disconnect(scenario) {
+            const ws = connections[scenario];
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                log(scenario, '主动断开连接', 'warning');
+                ws.close(1000, '用户主动断开');
+                stopHeartbeat(scenario);
+            }
+        }
+
+        function sendMessage(scenario) {
+            const ws = connections[scenario];
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send('v');
+                log(scenario, '发送心跳: v', 'info');
+            }
+        }
+
+        function startHeartbeat(scenario) {
+            if (heartbeats[scenario]) {
+                stopHeartbeat(scenario);
+            }
+            
+            log(scenario, '心跳已启动，间隔: 5秒，内容: v', 'success');
+            
+            // 立即发送第一个心跳
+            sendMessage(scenario);
+            
+            // 设置定时器
+            heartbeats[scenario] = setInterval(() => {
+                const ws = connections[scenario];
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    sendMessage(scenario);
+                } else {
+                    stopHeartbeat(scenario);
+                }
+            }, 5000);
+            
+            // 更新按钮文本
+            const scenarioId = scenario.startsWith('scenario') ? scenario.replace('scenario', '') : scenario;
+            const buttons = document.getElementById(`status${scenarioId === 'normal' ? '-normal' : scenarioId}`).parentElement.querySelectorAll('button');
+            for(let button of buttons) {
+                if (button.textContent === '启动自动心跳') {
+                    button.textContent = '停止自动心跳';
+                    button.onclick = () => stopHeartbeat(scenario);
+                }
+            }
+        }
+
+        function stopHeartbeat(scenario) {
+            if (heartbeats[scenario]) {
+                clearInterval(heartbeats[scenario]);
+                delete heartbeats[scenario];
+                log(scenario, '心跳已停止', 'warning');
+                
+                // 更新按钮文本
+                const scenarioId = scenario.startsWith('scenario') ? scenario.replace('scenario', '') : scenario;
+                const buttons = document.getElementById(`status${scenarioId === 'normal' ? '-normal' : scenarioId}`).parentElement.querySelectorAll('button');
+                for(let button of buttons) {
+                    if (button.textContent === '停止自动心跳') {
+                        button.textContent = '启动自动心跳';
+                        button.onclick = () => startHeartbeat(scenario);
+                    }
+                }
+            }
+        }
+
+        // 页面卸载时清理所有连接
+        window.addEventListener('beforeunload', () => {
+            for(let scenario in connections) {
+                disconnect(scenario);
+            }
+        });
+    </script>
+</body>
+</html> 
